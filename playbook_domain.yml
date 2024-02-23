@@ -1,0 +1,138 @@
+---
+- name: Incidencia con Dominio
+  hosts: clientev2  # Puedes cambiar esto según tus necesidades
+  gather_facts: true #Para que reconozca variables de ansible
+  become: true
+  vars:
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no' #para no instalar clave public ssh en los clientes.Siempre poner  
+    vars_destination: "/root/ansible_project/vars/output.json"
+  tasks: # Aqui vienen los puntos del correo de Gigas (ver estado, red, cou, etc)
+    - name: Instalar jq y whois en sistemas basados en Debian (Ubuntu)
+      package:
+        name: 
+          - jq
+          - whois
+        state: present
+      when: ansible_pkg_mgr == 'apt'
+    
+    - name: Instalar jq y whois en sistemas basados en Red Hat (CentOS)
+      package: #modulo
+        name: 
+          - jq
+          - whois
+        state: present
+      when: ansible_pkg_mgr == 'yum'
+
+    - name: Devolver registro A
+      command: nslookup {{ dominio_afectado }} #otro tipo de modulo 
+      register: registro_a
+      ignore_errors: true
+
+    - name: Devolver registro MX
+      command: nslookup -q=MX {{ dominio_afectado }}
+      register: registro_mx
+      ignore_errors: true
+
+    - name: Devolver registro normal
+      command: nslookup -q=TXT {{ dominio_afectado }}
+      register: registro_normal
+      ignore_errors: true
+
+    - name: Devolver registro A smtp
+      command: nslookup smtp.{{ dominio_afectado }}
+      register: registro_a_smtp
+      ignore_errors: true
+
+    - name: Devolver registro A pop3
+      command: nslookup pop3.{{ dominio_afectado }}
+      register: registro_a_pop3
+      ignore_errors: true
+
+    - name: Devolver registro A imap
+      command: nslookup imap.{{ dominio_afectado }}
+      register: registro_a_imap
+      ignore_errors: true
+
+    - name: Devolver DKIM
+      command: nslookup -q=TXT dkim._domainkey.{{ dominio_afectado }}
+      register: registro_dkim
+      ignore_errors: true
+
+    - name: Devolver DMARC
+      command: nslookup -q=TXT _dmarc.{{ dominio_afectado }}
+      register: registro_dmarc
+      ignore_errors: true
+
+    - name: Devolver SPF
+      shell: nslookup -q=TXT {{ dominio_afectado }} | grep -i spf
+      register: registro_spf
+      ignore_errors: true
+
+    - name: Mostrar resultado de Registro A
+      debug:
+        var: registro_a.stdout_lines
+
+    - name: Mostrar resultado de Registro MX
+      debug:
+        var: registro_mx.stdout_lines
+
+    - name: Mostrar resultado de Registro normal
+      debug:
+        var: registro_normal.stdout_lines
+
+    - name: Mostrar resultado de Registro A smtp
+      debug:
+        var: registro_a_smtp.stdout_lines
+
+    - name: Mostrar resultado de Registro A pop3
+      debug:
+        var: registro_a_pop3.stdout_lines
+
+    - name: Mostrar resultado de Registro A imap
+      debug:
+        var: registro_a_imap.stdout_lines
+
+    - name: Mostrar resultado de DKIM
+      debug:
+        var: registro_dkim.stdout_lines
+
+    - name: Mostrar resultado de DMARC
+      debug:
+        var:  registro_dmarc.stdout_lines | select('match', '^_dmarc') | list
+
+    - name: Mostrar resultado de SPF
+      debug:
+        var: registro_spf.stdout_lines
+    - name: Devolver registrador actual con whois
+      shell: 'curl "https://api.api-ninjas.com/v1/whois?domain={{ dominio_afectado }}" -H "X-Api-Key: {{ api_key }}" | jq -r ''.registrar, .whois_server'''
+      register: whois_result
+
+    - name: Mostrar registrador actual con whois
+      debug:
+        msg: "{{ whois_result.stdout_lines[0] }} {{ whois_result.stdout_lines[1] }}"
+    
+    # - name: Guardar resultado en archivo JSON
+    #   ansible.builtin.copy:
+    #     content: "{{ whois_result.stdout }}"
+    #     dest: "{{ vars_destination }}"
+
+    - name: Devolver zona DNS
+      shell: 'curl "https://api.api-ninjas.com/v1/whois?domain={{ dominio_afectado }}" -H "X-Api-Key: {{ api_key }}" | jq .name_servers'
+      register: dns_zone_result
+      
+
+    - name: Mostrar Zona DNS
+      debug:
+        msg: "{{ dns_zone_result.stdout_lines }}"
+    
+
+    - name: Devolver fecha de expiracion
+      shell: 'whois "{{ dominio_afectado }}" | grep -i expir'
+      register: expiration_date_result
+
+    - name: Mostrar fecha de expiracion
+      debug:
+        msg: "{{ expiration_date_result.stdout }}"
+
+
+
