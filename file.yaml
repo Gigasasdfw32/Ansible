@@ -1,0 +1,9 @@
+---
+- name: Trabajar con ficheros
+  hosts: all
+
+  tasks:
+  - name: Crear un fichero vacío
+    file:
+      path: "/tmp/prueba.txt"
+      state: "touch"
